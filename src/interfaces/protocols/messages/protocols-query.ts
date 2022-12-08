@@ -1,8 +1,10 @@
 import type { AuthCreateOptions } from '../../../core/types';
 import type { ProtocolsQueryDescriptor, ProtocolsQueryMessage } from '../types';
+
+import { DwnMethodName } from '../../../core/message';
+import { getCurrentDateInHighPrecision } from '../../../utils/time';
 import { Message } from '../../../core';
 import { removeUndefinedProperties } from '../../../utils/object';
-import { getCurrentDateInHighPrecision } from '../../../utils/time';
 
 export type ProtocolsQueryOptions = AuthCreateOptions & {
   target: string;
@@ -15,14 +17,17 @@ export type ProtocolsQueryOptions = AuthCreateOptions & {
 export class ProtocolsQuery extends Message {
   readonly message: ProtocolsQueryMessage; // a more specific type than the base type defined in parent class
 
-  constructor(message: ProtocolsQueryMessage) {
+  private constructor(message: ProtocolsQueryMessage) {
     super(message);
   }
 
-  static async create(options: ProtocolsQueryOptions): Promise<ProtocolsQuery> {
+  public static async parse(message: ProtocolsQueryMessage): Promise<ProtocolsQuery> {
+    return new ProtocolsQuery(message);
+  }
+
+  public static async create(options: ProtocolsQueryOptions): Promise<ProtocolsQuery> {
     const descriptor: ProtocolsQueryDescriptor = {
-      target      : options.target,
-      method      : 'ProtocolsQuery',
+      method      : DwnMethodName.ProtocolsQuery,
       dateCreated : options.dateCreated ?? getCurrentDateInHighPrecision(),
       filter      : options.filter,
     };
@@ -33,7 +38,7 @@ export class ProtocolsQuery extends Message {
 
     Message.validateJsonSchema({ descriptor, authorization: { } });
 
-    const authorization = await Message.signAsAuthorization(descriptor, options.signatureInput);
+    const authorization = await Message.signAsAuthorization(options.target, descriptor, options.signatureInput);
     const message = { descriptor, authorization };
 
     const protocolsQuery = new ProtocolsQuery(message);

@@ -1,11 +1,11 @@
 import type { BaseMessage } from '../../core/types';
+import { DwnMethodName } from '../../core/message';
 
 /**
  * Descriptor structure for HooksWrite
  */
 export type HooksWriteDescriptor = {
-  method: 'HooksWrite';
-  target: string;
+  method: DwnMethodName.HooksWrite;
   dateCreated: string;
 
   /**

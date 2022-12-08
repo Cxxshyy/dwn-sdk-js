@@ -1,17 +1,17 @@
-import type { AuthCreateOptions, Authorizable, AuthVerificationResult } from '../../../core/types';
-import type { PermissionsGrantDescriptor, PermissionsGrantMessage } from '../types';
-import type { PermissionScope, PermissionConditions } from '../types';
 import type { SignatureInput } from '../../../jose/jws/general/types';
+import type { AuthCreateOptions, Authorizable, AuthVerificationResult } from '../../../core/types';
+import type { PermissionConditions, PermissionScope } from '../types';
+import type { PermissionsGrantDescriptor, PermissionsGrantMessage } from '../types';
 
 import { canonicalAuth } from '../../../core/auth';
 import { CID } from 'multiformats/cid';
 import { DidResolver } from '../../../did/did-resolver';
 import { generateCid } from '../../../utils/cid';
+import { getCurrentDateInHighPrecision } from '../../../utils/time';
 import { Message } from '../../../core/message';
 import { MessageStore } from '../../../store/message-store';
-import { PermissionsRequest, DEFAULT_CONDITIONS } from './permissions-request';
 import { v4 as uuidv4 } from 'uuid';
-import { getCurrentDateInHighPrecision } from '../../../utils/time';
+import { DEFAULT_CONDITIONS, PermissionsRequest } from './permissions-request';
 
 type PermissionsGrantOptions = AuthCreateOptions & {
   target: string,
@@ -38,7 +38,6 @@ export class PermissionsGrant extends Message implements Authorizable {
     const mergedConditions = { ...DEFAULT_CONDITIONS, ...providedConditions };
 
     const descriptor: PermissionsGrantDescriptor = {
-      target      : options.target,
       dateCreated : options.dateCreated ?? getCurrentDateInHighPrecision(),
       conditions  : mergedConditions,
       description : options.description,
@@ -51,7 +50,7 @@ export class PermissionsGrant extends Message implements Authorizable {
 
     Message.validateJsonSchema({ descriptor, authorization: { } });
 
-    const authorization = await Message.signAsAuthorization(descriptor, options.signatureInput);
+    const authorization = await Message.signAsAuthorization(options.target, descriptor, options.signatureInput);
     const message: PermissionsGrantMessage = { descriptor, authorization };
 
     return new PermissionsGrant(message);
@@ -115,8 +114,8 @@ export class PermissionsGrant extends Message implements Authorizable {
     return delegatedGrant;
   }
 
-  verifyAuth(didResolver: DidResolver, messageStore: MessageStore): Promise<AuthVerificationResult> {
-    return canonicalAuth(this.message, didResolver, messageStore);
+  verifyAuth(didResolver: DidResolver, _messageStore: MessageStore): Promise<AuthVerificationResult> {
+    return canonicalAuth(this, didResolver);
   }
 
   get id(): string {

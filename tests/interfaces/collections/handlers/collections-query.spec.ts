@@ -1,3 +1,7 @@
+import chaiAsPromised from 'chai-as-promised';
+import sinon from 'sinon';
+import chai, { expect } from 'chai';
+
 import * as encoder from '../../../../src/utils/encoder';
 import { DidKeyResolver } from '../../../../src/did/did-key-resolver';
 import { DidResolver } from '../../../../src';
@@ -5,10 +9,7 @@ import { handleCollectionsQuery } from '../../../../src/interfaces/collections/h
 import { MessageStoreLevel } from '../../../../src/store/message-store-level';
 import { TestDataGenerator } from '../../../utils/test-data-generator';
 import { TestStubGenerator } from '../../../utils/test-stub-generator';
-import chai, { expect } from 'chai';
-import chaiAsPromised from 'chai-as-promised';
-import sinon from 'sinon';
-import { handleCollectionsWrite } from '../../../../src/interfaces/collections/handlers/collections-write';
+import { constructAdditionalIndexes, handleCollectionsWrite } from '../../../../src/interfaces/collections/handlers/collections-write';
 
 chai.use(chaiAsPromised);
 
@@ -41,20 +42,24 @@ describe('handleCollectionsQuery()', () => {
     it('should return records matching the query', async () => {
       // insert three messages into DB, two with matching protocol
       const alice = await TestDataGenerator.generatePersona();
-      const protocol = 'myAwesomeProtocol';
+      const dataFormat = 'myAwesomeDataFormat';
       const write1Data = await TestDataGenerator.generateCollectionsWriteMessage({ requester: alice, target: alice });
-      const write2Data = await TestDataGenerator.generateCollectionsWriteMessage({ requester: alice, target: alice, protocol, schema: 'schema1' });
-      const write3Data = await TestDataGenerator.generateCollectionsWriteMessage({ requester: alice, target: alice, protocol, schema: 'schema2' });
-
-      await messageStore.put(write1Data.message, { author: alice.did });
-      await messageStore.put(write2Data.message, { author: alice.did });
-      await messageStore.put(write3Data.message, { author: alice.did });
-
-      // testing singular conditional query
-      const messageData = await TestDataGenerator.generateCollectionsQueryMessage({ requester: alice, target: alice, filter: { protocol } });
+      const write2Data = await TestDataGenerator.generateCollectionsWriteMessage({ requester: alice, target: alice, dataFormat, schema: 'schema1' });
+      const write3Data = await TestDataGenerator.generateCollectionsWriteMessage({ requester: alice, target: alice, dataFormat, schema: 'schema2' });
 
       // setting up a stub method resolver
       const didResolverStub = TestStubGenerator.createDidResolverStub(alice);
+
+      // insert data into 3 different tenants
+      const writeReply1 = await handleCollectionsWrite(write1Data.message, messageStore, didResolverStub);
+      const writeReply2 = await handleCollectionsWrite(write2Data.message, messageStore, didResolverStub);
+      const writeReply3 = await handleCollectionsWrite(write3Data.message, messageStore, didResolverStub);
+      expect(writeReply1.status.code).to.equal(202);
+      expect(writeReply2.status.code).to.equal(202);
+      expect(writeReply3.status.code).to.equal(202);
+
+      // testing singular conditional query
+      const messageData = await TestDataGenerator.generateCollectionsQueryMessage({ requester: alice, target: alice, filter: { dataFormat } });
 
       const reply = await handleCollectionsQuery(messageData.message, messageStore, didResolverStub);
 
@@ -66,7 +71,7 @@ describe('handleCollectionsQuery()', () => {
         requester : alice,
         target    : alice,
         filter    : {
-          protocol,
+          dataFormat,
           schema: 'schema1'
         }
       });
@@ -99,10 +104,15 @@ describe('handleCollectionsQuery()', () => {
         { requester: alice, target: alice, schema, data: encoder.stringToBytes('4'), published: true, datePublished: 123 }
       );
 
-      await messageStore.put(record1Data.message, { author: alice.did });
-      await messageStore.put(record2Data.message, { author: alice.did });
-      await messageStore.put(record3Data.message, { author: bob.did });
-      await messageStore.put(record4Data.message, { author: alice.did });
+      // directly inserting data to datastore so that we don't have to setup to grant Bob permission to write to Alice's DWN
+      const additionalIndexes1 = constructAdditionalIndexes(record1Data.collectionsWrite, true);
+      const additionalIndexes2 = constructAdditionalIndexes(record2Data.collectionsWrite, true);
+      const additionalIndexes3 = constructAdditionalIndexes(record3Data.collectionsWrite, true);
+      const additionalIndexes4 = constructAdditionalIndexes(record4Data.collectionsWrite, true);
+      await messageStore.put(record1Data.message, additionalIndexes1);
+      await messageStore.put(record2Data.message, additionalIndexes2);
+      await messageStore.put(record3Data.message, additionalIndexes3);
+      await messageStore.put(record4Data.message, additionalIndexes4);
 
       // test correctness for Bob's query
       const bobQueryMessageData = await TestDataGenerator.generateCollectionsQueryMessage({

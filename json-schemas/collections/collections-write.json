@@ -27,9 +27,6 @@
           ],
           "type": "string"
         },
-        "target": {
-          "$ref": "https://identity.foundation/dwn/json-schemas/defs.json#/definitions/did"
-        },
         "recipient": {
           "$ref": "https://identity.foundation/dwn/json-schemas/defs.json#/definitions/did"
         },
@@ -37,6 +34,9 @@
           "type": "string"
         },
         "schema": {
+          "type": "string"
+        },
+        "lineageParent": {
           "type": "string"
         },
         "parentId": {
@@ -61,7 +61,6 @@
       },
       "additionalProperties": false,
       "required": [
-        "target",
         "method",
         "dataCid",
         "dateCreated",

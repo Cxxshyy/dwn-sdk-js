@@ -1,11 +1,13 @@
 import type { AuthCreateOptions, Authorizable, AuthVerificationResult } from '../../../core/types';
 import type { CollectionsQueryDescriptor, CollectionsQueryMessage } from '../types';
-import { authenticate, validateAuthorizationIntegrity } from '../../../core/auth';
+
 import { DidResolver } from '../../../did/did-resolver';
+import { DwnMethodName } from '../../../core/message';
+import { getCurrentDateInHighPrecision } from '../../../utils/time';
 import { Message } from '../../../core/message';
 import { MessageStore } from '../../../store/message-store';
 import { removeUndefinedProperties } from '../../../utils/object';
-import { getCurrentDateInHighPrecision } from '../../../utils/time';
+import { authenticate, validateAuthorizationIntegrity } from '../../../core/auth';
 
 export type CollectionsQueryOptions = AuthCreateOptions & {
   target: string;
@@ -25,14 +27,17 @@ export type CollectionsQueryOptions = AuthCreateOptions & {
 export class CollectionsQuery extends Message implements Authorizable {
   readonly message: CollectionsQueryMessage; // a more specific type than the base type defined in parent class
 
-  constructor(message: CollectionsQueryMessage) {
+  private constructor(message: CollectionsQueryMessage) {
     super(message);
   }
 
-  static async create(options: CollectionsQueryOptions): Promise<CollectionsQuery> {
+  public static async parse(message: CollectionsQueryMessage): Promise<CollectionsQuery> {
+    return new CollectionsQuery(message);
+  }
+
+  public static async create(options: CollectionsQueryOptions): Promise<CollectionsQuery> {
     const descriptor: CollectionsQueryDescriptor = {
-      target      : options.target,
-      method      : 'CollectionsQuery',
+      method      : DwnMethodName.CollectionsQuery,
       dateCreated : options.dateCreated ?? getCurrentDateInHighPrecision(),
       filter      : options.filter,
       dateSort    : options.dateSort
@@ -44,7 +49,7 @@ export class CollectionsQuery extends Message implements Authorizable {
 
     Message.validateJsonSchema({ descriptor, authorization: { } });
 
-    const authorization = await Message.signAsAuthorization(descriptor, options.signatureInput);
+    const authorization = await Message.signAsAuthorization(options.target, descriptor, options.signatureInput);
     const message = { descriptor, authorization };
 
     return new CollectionsQuery(message);

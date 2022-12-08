@@ -1,12 +1,13 @@
-import type { BaseMessage, Descriptor } from './types';
 import type { SignatureInput } from '../jose/jws/general/types';
+import type { BaseDecodedAuthorizationPayload, BaseMessage, Descriptor } from './types';
 
 import { CID } from 'multiformats/cid';
 import { CollectionsWriteMessage } from '../interfaces/collections/types';
-import { compareCids, generateCid } from '../utils/cid';
 import { GeneralJws } from '../jose/jws/general/types';
-import { GeneralJwsSigner, GeneralJwsVerifier } from '../jose/jws/general';
 import { validate } from '../validator';
+
+import { compareCids, generateCid } from '../utils/cid';
+import { GeneralJwsSigner, GeneralJwsVerifier } from '../jose/jws/general';
 
 export enum DwnMethodName {
   CollectionsWrite = 'CollectionsWrite',
@@ -17,14 +18,19 @@ export enum DwnMethodName {
 }
 
 export abstract class Message {
-  readonly author: string;
-  readonly authorizationPayload: any;
   readonly message: BaseMessage;
+  readonly authorizationPayload: any;
+
+  // commonly used properties for extra convenience;
+  readonly author: string;
+  readonly target: string;
 
   constructor(message: BaseMessage) {
-    this.author = GeneralJwsVerifier.getDid(message.authorization.signatures[0]);
-    this.authorizationPayload = GeneralJwsVerifier.decodePlainObjectPayload(message.authorization);
     this.message = message;
+    this.authorizationPayload = GeneralJwsVerifier.decodePlainObjectPayload(message.authorization);
+
+    this.author = Message.getAuthor(message);
+    this.target = this.authorizationPayload.target;
   }
 
   /**
@@ -44,6 +50,14 @@ export abstract class Message {
 
     return rawMessage as BaseMessage;
   };
+
+  /**
+   * Gets the DID of the author of the given message.
+   */
+  public static getAuthor(message: BaseMessage): string {
+    const author = GeneralJwsVerifier.getDid(message.authorization.signatures[0]);
+    return author;
+  }
 
   /**
    * Gets the CID of the given message.
@@ -97,17 +111,19 @@ export abstract class Message {
   /**
    * Signs the provided message to be used an `authorization` property. Signed payload includes the CID of the message's descriptor by default
    * along with any additional payload properties provided
+   * @param target - the logical DID where this message will be sent to
    * @param descriptor - the message to sign
    * @param signatureInput - the signature material to use (e.g. key and header data)
    * @returns General JWS signature used as an `authorization` property.
    */
   public static async signAsAuthorization(
+    target: string,
     descriptor: Descriptor,
     signatureInput: SignatureInput
   ): Promise<GeneralJws> {
     const descriptorCid = await generateCid(descriptor);
 
-    const authPayload = { descriptorCid: descriptorCid.toString() };
+    const authPayload: BaseDecodedAuthorizationPayload = { target, descriptorCid: descriptorCid.toString() };
     const authPayloadStr = JSON.stringify(authPayload);
     const authPayloadBytes = new TextEncoder().encode(authPayloadStr);
 

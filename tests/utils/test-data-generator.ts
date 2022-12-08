@@ -1,5 +1,14 @@
 import * as cbor from '@ipld/dag-cbor';
 import { BaseMessage } from '../../src/core/types';
+import { CID } from 'multiformats/cid';
+import { DidResolutionResult } from '../../src/did/did-resolver';
+import { ed25519 } from '../../src/jose/algorithms/signing/ed25519';
+import { getCurrentDateInHighPrecision } from '../../src/utils/time';
+import { PermissionsRequest } from '../../src/interfaces/permissions/messages/permissions-request';
+import { removeUndefinedProperties } from '../../src/utils/object';
+import { secp256k1 } from '../../src/jose/algorithms/signing/secp256k1';
+import { sha256 } from 'multiformats/hashes/sha2';
+import { SignatureInput } from '../../src/jose/jws/general/types';
 import {
   CollectionsQuery,
   CollectionsQueryMessage,
@@ -18,15 +27,7 @@ import {
   ProtocolsQueryMessage,
   ProtocolsQueryOptions
 } from '../../src';
-import { CID } from 'multiformats/cid';
-import { DidResolutionResult } from '../../src/did/did-resolver';
-import { ed25519 } from '../../src/jose/algorithms/signing/ed25519';
-import { getCurrentDateInHighPrecision } from '../../src/utils/time';
-import { PermissionsRequest } from '../../src/interfaces/permissions/messages/permissions-request';
 import { PrivateJwk, PublicJwk } from '../../src/jose/types';
-import { removeUndefinedProperties } from '../../src/utils/object';
-import { secp256k1 } from '../../src/jose/algorithms/signing/secp256k1';
-import { sha256 } from 'multiformats/hashes/sha2';
 
 /**
  * A logical grouping of user data used to generate test messages.
@@ -74,6 +75,7 @@ export type GenerateCollectionsWriteMessageInput = {
   contextId?: string;
   schema?: string;
   recordId?: string;
+  lineageParent?: string;
   parentId?: string;
   published?: boolean;
   data?: Uint8Array;
@@ -160,6 +162,21 @@ export class TestDataGenerator {
   }
 
   /**
+   * Creates a SignatureInput from the given Persona.
+   */
+  public static createSignatureInputFromPersona(persona: Persona): SignatureInput {
+    const signatureInput = {
+      jwkPrivate      : persona.keyPair.privateJwk,
+      protectedHeader : {
+        alg : persona.keyPair.privateJwk.alg as string,
+        kid : persona.keyId
+      }
+    };
+
+    return signatureInput;
+  }
+
+  /**
    * Generates a ProtocolsConfigure message for testing.
    * Optional parameters are generated if not given.
    * Implementation currently uses `ProtocolsConfigure.create()`.
@@ -243,6 +260,7 @@ export class TestDataGenerator {
   /**
    * Generates a CollectionsWrite message for testing.
    * Optional parameters are generated if not given.
+   * If `requester` and `target` are both not given, use the same persona to pass authorization in tests by default.
    * Implementation currently uses `CollectionsWrite.create()`.
    */
   public static async generateCollectionsWriteMessage(input?: GenerateCollectionsWriteMessageInput): Promise<GenerateCollectionsWriteMessageOutput> {
@@ -265,7 +283,8 @@ export class TestDataGenerator {
       protocol      : input?.protocol,
       contextId     : input?.contextId,
       schema        : input?.schema ?? TestDataGenerator.randomString(20),
-      recordId      : input?.recordId ?? await TestDataGenerator.randomCborSha256Cid(),
+      recordId      : input?.recordId,
+      lineageParent : input?.lineageParent,
       parentId      : input?.parentId,
       published     : input?.published,
       dataFormat    : input?.dataFormat ?? 'application/json',
@@ -357,10 +376,11 @@ export class TestDataGenerator {
   /**
    * Generates a PermissionsRequest message for testing.
    */
-  public static async generatePermissionsRequestMessage(): Promise<BaseMessage> {
+  public static async generatePermissionsRequestMessage(): Promise<{target, message: BaseMessage}> {
     const { privateJwk } = await ed25519.generateKeyPair();
+    const target = 'did:jank:alice';
     const permissionRequest = await PermissionsRequest.create({
-      target         : 'did:jank:alice',
+      target,
       dateCreated    : getCurrentDateInHighPrecision(),
       description    : 'drugs',
       grantedBy      : 'did:jank:bob',
@@ -369,7 +389,7 @@ export class TestDataGenerator {
       signatureInput : { jwkPrivate: privateJwk, protectedHeader: { alg: privateJwk.alg as string, kid: 'whatev' } }
     });
 
-    return permissionRequest.message;
+    return { target, message: permissionRequest.message };
   }
 
   /**

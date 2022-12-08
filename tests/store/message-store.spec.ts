@@ -1,8 +1,9 @@
+import { CollectionsWriteMessage } from '../../src/interfaces/collections/types';
 import { expect } from 'chai';
 import { generateCid } from '../../src/utils/cid';
+import { Message } from '../../src/core';
 import { MessageStoreLevel } from '../../src/store/message-store-level';
 import { TestDataGenerator } from '../utils/test-data-generator';
-import { CollectionsWriteMessage } from '../../src/interfaces/collections/types';
 
 let messageStore: MessageStoreLevel;
 
@@ -72,7 +73,7 @@ describe('MessageStoreLevel Tests', () => {
     });
 
     it('stores messages as cbor/sha256 encoded blocks with CID as key', async () => {
-      const message = await TestDataGenerator.generatePermissionsRequestMessage();
+      const { message } = await TestDataGenerator.generatePermissionsRequestMessage();
 
       await messageStore.put(message, { });
 
@@ -85,12 +86,36 @@ describe('MessageStoreLevel Tests', () => {
     });
 
     it('adds tenant to index', async () => {
-      const message = await TestDataGenerator.generatePermissionsRequestMessage();
+      const { target, message } = await TestDataGenerator.generatePermissionsRequestMessage();
 
-      await messageStore.put(message, { });
+      await messageStore.put(message, { target });
 
-      const results = await messageStore.query({ target: message.descriptor.target });
+      const results = await messageStore.query({ target });
       expect(results.length).to.equal(1);
+    });
+
+    it('should be able to update (delete and insert new) indexes to an existing message', async () => {
+      const { target, message } = await TestDataGenerator.generateCollectionsWriteMessage();
+
+      // inserting the message indicating it is the 'latest' in the index
+      await messageStore.put(message, { target: target.did, latest: 'true' });
+
+      const results1 = await messageStore.query({ target: target.did, latest: 'true' });
+      expect(results1.length).to.equal(1);
+
+      const results2 = await messageStore.query({ target: target.did, latest: 'false' });
+      expect(results2.length).to.equal(0);
+
+      // deleting the existing indexes and replacing it indicating it is no longer the 'latest'
+      const cid = await Message.getCid(message);
+      await messageStore.delete(cid);
+      await messageStore.put(message, { target: target.did, latest: 'false' });
+
+      const results3 = await messageStore.query({ target: target.did, latest: 'true' });
+      expect(results3.length).to.equal(0);
+
+      const results4 = await messageStore.query({ target: target.did, latest: 'false' });
+      expect(results4.length).to.equal(1);
     });
 
     it('should index properties with characters beyond just letters and digits', async () => {
@@ -103,31 +128,4 @@ describe('MessageStoreLevel Tests', () => {
       expect((results[0] as CollectionsWriteMessage).descriptor.schema).to.equal(schema);
     });
   });
-
-  // describe('get', () => {
-  //   before(async () => {
-  //     await messageStore.open();
-  //   });
-
-  //   afterEach(async () => {
-  //     await messageStore.clear();
-  //   });
-
-  //   after(async () => {
-  //     await messageStore.close();
-  //   });
-
-
-  //   it('returns undefined if message does not exist', async () => {
-  //     const { cid } = await block.encode({ value: { beep: 'boop' }, codec: cbor, hasher: sha256 });
-  //     const message = await messageStore.get(cid);
-
-  //     expect(message).to.be.undefined;
-  //   });
-  // });
-
-  // describe('query', () => {});
-
-  // describe('delete', () => {});
-
 });

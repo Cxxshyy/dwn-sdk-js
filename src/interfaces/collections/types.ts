@@ -1,11 +1,12 @@
 import { BaseMessage } from '../../core/types';
+import { DwnMethodName } from '../../core/message';
 
 export type CollectionsWriteDescriptor = {
-  target: string;
   recipient: string;
-  method: 'CollectionsWrite';
+  method: DwnMethodName.CollectionsWrite;
   protocol?: string;
   schema?: string;
+  lineageParent?: string;
   parentId?: string;
   dataCid: string;
   dateCreated: string;
@@ -22,8 +23,7 @@ export type CollectionsWriteMessage = BaseMessage & {
 };
 
 export type CollectionsQueryDescriptor = {
-  target: string;
-  method: 'CollectionsQuery';
+  method: DwnMethodName.CollectionsQuery;
   dateCreated: string;
   filter: {
     recipient?: string;
@@ -38,6 +38,7 @@ export type CollectionsQueryDescriptor = {
 };
 
 export type CollectionsWriteAuthorizationPayload = {
+  target: string;
   recordId: string;
   contextId?: string;
   descriptorCid: string;
